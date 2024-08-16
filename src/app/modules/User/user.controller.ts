@@ -1,4 +1,10 @@
 import { Request, Response } from "express";
+import httpStatus from "http-status";
+import { Secret } from "jsonwebtoken";
+import { UserRole } from "../../../../prisma/generated/client";
+import config from "../../../config";
+import { jwtToken } from "../../constants/jwtToken";
+import ApiError from "../../errors/ApiError";
 import catchAsync from "../../shared/catchAsync";
 import pick from "../../shared/pick";
 import sendResponse from "../../shared/sendResponse";
@@ -54,6 +60,7 @@ const getAllUser = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
+
 const getSingleUser = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
   const result = await UserService.getSingleUserFromDB(id);
@@ -132,6 +139,7 @@ const updateUserProfile = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
+
 const updateUserRoleStatus = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
   const result = await UserService.updateUserRoleStatusIntoDB({
@@ -141,9 +149,60 @@ const updateUserRoleStatus = catchAsync(async (req: Request, res: Response) => {
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: "User profile updated successfully",
+    message: "User role status updated successfully",
     data: result,
   });
+});
+
+const getStats = catchAsync(async (req: Request, res: Response) => {
+  const token = req.headers.authorization;
+  const decodedToken = jwtToken.verifyToken(
+    token as string,
+    config.jwt.jwt_secret as Secret
+  );
+
+  const role = decodedToken.role;
+  const userId = decodedToken.id;
+
+  console.log("decodedToken", decodedToken, role, userId);
+  if (!role) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Role is required.");
+  }
+
+  if (role === UserRole.donor || role === UserRole.requester) {
+    if (!userId) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "User ID is required for donor or requester stats."
+      );
+    }
+
+    const result = await UserService.getStatsFromDB(
+      role as UserRole,
+      userId as string,
+      token
+    );
+    sendResponse(res, {
+      success: true,
+      statusCode: 200,
+      message: `${role} stats retrieved successfully`,
+      data: result,
+    });
+  } else if (role === UserRole.admin) {
+    const result = await UserService.getStatsFromDB(
+      role as UserRole,
+      "",
+      token
+    ); // Admin role does not need userId
+    sendResponse(res, {
+      success: true,
+      statusCode: 200,
+      message: "Admin stats retrieved successfully",
+      data: result,
+    });
+  } else {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid role specified.");
+  }
 });
 
 export const UserController = {
@@ -157,4 +216,5 @@ export const UserController = {
   getSingleUser,
   updateUserRoleStatus,
   getAllUser,
+  getStats,
 };

@@ -216,24 +216,42 @@ const getDonationRequestsForDonorFromDB = (req) => __awaiter(void 0, void 0, voi
     }
     // Decoding the token to get the donor's details
     const decodedToken = jwtToken_1.jwtToken.verifyToken(token, config_1.default.jwt.jwt_secret);
-    const result = yield prisma_1.default.request.findMany({
-        where: {
-            donorId: decodedToken.id,
-        },
-        include: {
-            requester: {
-                select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                    phone: true,
-                    location: true,
-                    bloodType: true,
-                    availability: true,
-                },
+    const donor = {
+        requester: {
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                location: true,
+                bloodType: true,
+                availability: true,
             },
         },
+    };
+    const requester = {
+        donor: {
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                location: true,
+                bloodType: true,
+                availability: true,
+            },
+        },
+    };
+    console.log(decodedToken);
+    const requesterData = { requesterId: decodedToken.id };
+    const donorData = { donorId: decodedToken.id };
+    const includeOption = (decodedToken === null || decodedToken === void 0 ? void 0 : decodedToken.role) === "donor" ? donor : requester;
+    const whereOption = (decodedToken === null || decodedToken === void 0 ? void 0 : decodedToken.role) === "donor" ? donorData : requesterData;
+    const result = yield prisma_1.default.request.findMany({
+        where: Object.assign({}, whereOption),
+        include: Object.assign({}, includeOption),
     });
+    console.log(result, decodedToken);
     return result;
 });
 const updateRequestStatusIntoDB = (req, requestId, status) => __awaiter(void 0, void 0, void 0, function* () {

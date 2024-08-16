@@ -57,4 +57,11 @@ router.patch(
   UserController.updateUserRoleStatus
 );
 
+// Stats routes
+router.get(
+  "/stats",
+  auth(UserRole.admin, UserRole.donor, UserRole.requester),
+  UserController.getStats
+);
+
 export const UserRoutes = router;

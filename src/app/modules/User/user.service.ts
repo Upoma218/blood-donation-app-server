@@ -1,4 +1,5 @@
 import bcrypt from "bcrypt";
+import { eachDayOfInterval, subDays } from "date-fns";
 import { Request } from "express";
 import httpStatus from "http-status";
 import { Secret } from "jsonwebtoken";
@@ -454,6 +455,217 @@ const updateUserRoleStatusIntoDB = async (payload: UpdateUser) => {
   return updatedProfile;
 };
 
+/* All stats */
+
+// Helper function for donor/requester donation stats with full date range
+
+/* All stats */
+
+const getDonationsWithFullDateRange = async (
+  userId: string,
+  role: UserRole,
+  daysBack: number = 30
+) => {
+  // Step 1: Generate the complete date range
+  const endDate = new Date();
+  const startDate = subDays(endDate, daysBack);
+
+  const fullDateRange = eachDayOfInterval({
+    start: startDate,
+    end: endDate,
+  });
+
+  // Step 2: Query donation counts by date where donations exist
+  const donations = await prisma.request.groupBy({
+    by: ["dateOfDonation"],
+    where: {
+      [role === UserRole.donor ? "donorId" : "requesterId"]: userId,
+      dateOfDonation: {
+        gte: startDate.toISOString(), // Convert Date to ISO string
+        lte: endDate.toISOString(),
+      },
+    },
+    _count: {
+      id: true,
+    },
+    orderBy: {
+      dateOfDonation: "asc",
+    },
+  });
+
+  // Step 3: Merge the full date range with the donations result
+  const donationsMap = donations.reduce((acc: any, curr: any) => {
+    acc[curr.dateOfDonation.toISOString().split("T")[0]] = curr._count.id;
+    return acc;
+  }, {});
+
+  const donationsWithAllDates = fullDateRange.map((date) => {
+    const dateKey = date.toISOString().split("T")[0]; // Get date in YYYY-MM-DD format
+    return {
+      date: dateKey,
+      count: donationsMap[dateKey] || 0, // Fill in with 0 if no donation exists for that date
+    };
+  });
+
+  return donationsWithAllDates;
+};
+
+// For Donor Stats
+const getDonorStats = async (userId: string) => {
+  const totalRequests = await prisma.request.count({
+    where: { donorId: userId },
+  });
+
+  const totalPendingRequests = await prisma.request.count({
+    where: {
+      donorId: userId,
+      requestStatus: RequestStatus.PENDING,
+    },
+  });
+
+  const totalApprovedRequests = await prisma.request.count({
+    where: {
+      donorId: userId,
+      requestStatus: RequestStatus.APPROVED,
+    },
+  });
+
+  const totalRejectedRequests = await prisma.request.count({
+    where: {
+      donorId: userId,
+      requestStatus: RequestStatus.REJECTED,
+    },
+  });
+
+  // Call the helper function to get donations with full date range
+  const donations = await getDonationsWithFullDateRange(userId, UserRole.donor);
+
+  return {
+    totalRequests,
+    totalPendingRequests,
+    totalApprovedRequests,
+    totalRejectedRequests,
+    donations,
+  };
+};
+
+// For Requester Stats
+const getRequesterStats = async (userId: string) => {
+  const totalRequests = await prisma.request.count({
+    where: { requesterId: userId },
+  });
+
+  const totalPendingRequests = await prisma.request.count({
+    where: {
+      requesterId: userId,
+      requestStatus: RequestStatus.PENDING,
+    },
+  });
+
+  const totalApprovedRequests = await prisma.request.count({
+    where: {
+      requesterId: userId,
+      requestStatus: RequestStatus.APPROVED,
+    },
+  });
+
+  const totalRejectedRequests = await prisma.request.count({
+    where: {
+      requesterId: userId,
+      requestStatus: RequestStatus.REJECTED,
+    },
+  });
+
+  // Call the helper function to get donations with full date range
+  const donations = await getDonationsWithFullDateRange(
+    userId,
+    UserRole.requester
+  );
+
+  return {
+    totalRequests,
+    totalPendingRequests,
+    totalApprovedRequests,
+    totalRejectedRequests,
+    donations,
+  };
+};
+
+// For Admin Stats
+const getAdminStats = async () => {
+  const totalUsers = await prisma.user.count();
+  const totalDonors = await prisma.user.count({
+    where: { role: UserRole.donor },
+  });
+  const totalRequesters = await prisma.user.count({
+    where: { role: UserRole.requester },
+  });
+  const totalAvailableDonors = await prisma.user.count({
+    where: { role: UserRole.donor, availability: true },
+  });
+  const totalActiveUsers = await prisma.user.count({
+    where: { status: Status.active },
+  });
+  const totalDeactivatedUsers = await prisma.user.count({
+    where: { status: Status.deactive },
+  });
+
+  return {
+    totalUsers,
+    totalDonors,
+    totalRequesters,
+    totalAvailableDonors,
+    totalActiveUsers,
+    totalDeactivatedUsers,
+  };
+};
+
+// Aggregate getStatsFromDB for different roles
+const getStatsFromDB = async (
+  role: UserRole,
+  userId: string,
+  token?: string
+): Promise<any> => {
+  // Decode the token if provided
+  // Decode token utility function
+  const decodeToken = (token: string) => {
+    try {
+      return jwtToken.verifyToken(token, config.jwt.jwt_secret as Secret) as {
+        id: string;
+        role: UserRole;
+      };
+    } catch (error) {
+      throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid token.");
+    }
+  };
+
+  switch (role) {
+    case UserRole.donor:
+      if (!userId) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          "User ID is required for donor stats."
+        );
+      }
+      return await getDonorStats(userId);
+
+    case UserRole.requester:
+      if (!userId) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          "User ID is required for requester stats."
+        );
+      }
+      return await getRequesterStats(userId);
+
+    case UserRole.admin:
+      return await getAdminStats();
+
+    default:
+      throw new ApiError(httpStatus.BAD_REQUEST, "Invalid role specified.");
+  }
+};
+
 export const UserService = {
   registerUserIntoDB,
   getAllDonarFromDB,
@@ -465,4 +677,9 @@ export const UserService = {
   getSingleUserFromDB,
   updateUserRoleStatusIntoDB,
   getAllUserFromDB,
+  getStatsFromDB,
+  getDonationsWithFullDateRange,
+  getDonorStats,
+  getAdminStats,
+  getRequesterStats,
 };
