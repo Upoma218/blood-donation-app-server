@@ -13,6 +13,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserController = void 0;
+const http_status_1 = __importDefault(require("http-status"));
+const client_1 = require("../../../../prisma/generated/client");
+const config_1 = __importDefault(require("../../../config"));
+const jwtToken_1 = require("../../constants/jwtToken");
+const ApiError_1 = __importDefault(require("../../errors/ApiError"));
 const catchAsync_1 = __importDefault(require("../../shared/catchAsync"));
 const pick_1 = __importDefault(require("../../shared/pick"));
 const sendResponse_1 = __importDefault(require("../../shared/sendResponse"));
@@ -134,9 +139,43 @@ const updateUserRoleStatus = (0, catchAsync_1.default)((req, res) => __awaiter(v
     (0, sendResponse_1.default)(res, {
         statusCode: 200,
         success: true,
-        message: "User profile updated successfully",
+        message: "User role status updated successfully",
         data: result,
     });
+}));
+const getStats = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const token = req.headers.authorization;
+    const decodedToken = jwtToken_1.jwtToken.verifyToken(token, config_1.default.jwt.jwt_secret);
+    const role = decodedToken.role;
+    const userId = decodedToken.id;
+    console.log("decodedToken", decodedToken, role, userId);
+    if (!role) {
+        throw new ApiError_1.default(http_status_1.default.BAD_REQUEST, "Role is required.");
+    }
+    if (role === client_1.UserRole.donor || role === client_1.UserRole.requester) {
+        if (!userId) {
+            throw new ApiError_1.default(http_status_1.default.BAD_REQUEST, "User ID is required for donor or requester stats.");
+        }
+        const result = yield user_service_1.UserService.getStatsFromDB(role, userId, token);
+        (0, sendResponse_1.default)(res, {
+            success: true,
+            statusCode: 200,
+            message: `${role} stats retrieved successfully`,
+            data: result,
+        });
+    }
+    else if (role === client_1.UserRole.admin) {
+        const result = yield user_service_1.UserService.getStatsFromDB(role, "", token); // Admin role does not need userId
+        (0, sendResponse_1.default)(res, {
+            success: true,
+            statusCode: 200,
+            message: "Admin stats retrieved successfully",
+            data: result,
+        });
+    }
+    else {
+        throw new ApiError_1.default(http_status_1.default.BAD_REQUEST, "Invalid role specified.");
+    }
 }));
 exports.UserController = {
     registerUser,
@@ -149,4 +188,5 @@ exports.UserController = {
     getSingleUser,
     updateUserRoleStatus,
     getAllUser,
+    getStats,
 };

@@ -25,6 +25,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserService = void 0;
 const bcrypt_1 = __importDefault(require("bcrypt"));
+const date_fns_1 = require("date-fns");
 const http_status_1 = __importDefault(require("http-status"));
 const client_1 = require("../../../../prisma/generated/client");
 const config_1 = __importDefault(require("../../../config"));
@@ -356,6 +357,170 @@ const updateUserRoleStatusIntoDB = (payload) => __awaiter(void 0, void 0, void 0
     console.log(updatedProfile);
     return updatedProfile;
 });
+/* All stats */
+// Helper function for donor/requester donation stats with full date range
+/* All stats */
+const getDonationsWithFullDateRange = (userId_1, role_1, ...args_1) => __awaiter(void 0, [userId_1, role_1, ...args_1], void 0, function* (userId, role, daysBack = 30) {
+    // Step 1: Generate the complete date range
+    const endDate = new Date();
+    const startDate = (0, date_fns_1.subDays)(endDate, daysBack);
+    const fullDateRange = (0, date_fns_1.eachDayOfInterval)({
+        start: startDate,
+        end: endDate,
+    });
+    // Step 2: Query donation counts by date where donations exist
+    const donations = yield prisma_1.default.request.groupBy({
+        by: ["dateOfDonation"],
+        where: {
+            [role === client_1.UserRole.donor ? "donorId" : "requesterId"]: userId,
+            dateOfDonation: {
+                gte: startDate.toISOString(), // Convert Date to ISO string
+                lte: endDate.toISOString(),
+            },
+        },
+        _count: {
+            id: true,
+        },
+        orderBy: {
+            dateOfDonation: "asc",
+        },
+    });
+    // Step 3: Merge the full date range with the donations result
+    const donationsMap = donations.reduce((acc, curr) => {
+        acc[curr.dateOfDonation.toISOString().split("T")[0]] = curr._count.id;
+        return acc;
+    }, {});
+    const donationsWithAllDates = fullDateRange.map((date) => {
+        const dateKey = date.toISOString().split("T")[0]; // Get date in YYYY-MM-DD format
+        return {
+            date: dateKey,
+            count: donationsMap[dateKey] || 0, // Fill in with 0 if no donation exists for that date
+        };
+    });
+    return donationsWithAllDates;
+});
+// For Donor Stats
+const getDonorStats = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    const totalRequests = yield prisma_1.default.request.count({
+        where: { donorId: userId },
+    });
+    const totalPendingRequests = yield prisma_1.default.request.count({
+        where: {
+            donorId: userId,
+            requestStatus: client_1.RequestStatus.PENDING,
+        },
+    });
+    const totalApprovedRequests = yield prisma_1.default.request.count({
+        where: {
+            donorId: userId,
+            requestStatus: client_1.RequestStatus.APPROVED,
+        },
+    });
+    const totalRejectedRequests = yield prisma_1.default.request.count({
+        where: {
+            donorId: userId,
+            requestStatus: client_1.RequestStatus.REJECTED,
+        },
+    });
+    // Call the helper function to get donations with full date range
+    const donations = yield getDonationsWithFullDateRange(userId, client_1.UserRole.donor);
+    return {
+        totalRequests,
+        totalPendingRequests,
+        totalApprovedRequests,
+        totalRejectedRequests,
+        donations,
+    };
+});
+// For Requester Stats
+const getRequesterStats = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    const totalRequests = yield prisma_1.default.request.count({
+        where: { requesterId: userId },
+    });
+    const totalPendingRequests = yield prisma_1.default.request.count({
+        where: {
+            requesterId: userId,
+            requestStatus: client_1.RequestStatus.PENDING,
+        },
+    });
+    const totalApprovedRequests = yield prisma_1.default.request.count({
+        where: {
+            requesterId: userId,
+            requestStatus: client_1.RequestStatus.APPROVED,
+        },
+    });
+    const totalRejectedRequests = yield prisma_1.default.request.count({
+        where: {
+            requesterId: userId,
+            requestStatus: client_1.RequestStatus.REJECTED,
+        },
+    });
+    // Call the helper function to get donations with full date range
+    const donations = yield getDonationsWithFullDateRange(userId, client_1.UserRole.requester);
+    return {
+        totalRequests,
+        totalPendingRequests,
+        totalApprovedRequests,
+        totalRejectedRequests,
+        donations,
+    };
+});
+// For Admin Stats
+const getAdminStats = () => __awaiter(void 0, void 0, void 0, function* () {
+    const totalUsers = yield prisma_1.default.user.count();
+    const totalDonors = yield prisma_1.default.user.count({
+        where: { role: client_1.UserRole.donor },
+    });
+    const totalRequesters = yield prisma_1.default.user.count({
+        where: { role: client_1.UserRole.requester },
+    });
+    const totalAvailableDonors = yield prisma_1.default.user.count({
+        where: { role: client_1.UserRole.donor, availability: true },
+    });
+    const totalActiveUsers = yield prisma_1.default.user.count({
+        where: { status: client_1.Status.active },
+    });
+    const totalDeactivatedUsers = yield prisma_1.default.user.count({
+        where: { status: client_1.Status.deactive },
+    });
+    return {
+        totalUsers,
+        totalDonors,
+        totalRequesters,
+        totalAvailableDonors,
+        totalActiveUsers,
+        totalDeactivatedUsers,
+    };
+});
+// Aggregate getStatsFromDB for different roles
+const getStatsFromDB = (role, userId, token) => __awaiter(void 0, void 0, void 0, function* () {
+    // Decode the token if provided
+    // Decode token utility function
+    const decodeToken = (token) => {
+        try {
+            return jwtToken_1.jwtToken.verifyToken(token, config_1.default.jwt.jwt_secret);
+        }
+        catch (error) {
+            throw new ApiError_1.default(http_status_1.default.UNAUTHORIZED, "Invalid token.");
+        }
+    };
+    switch (role) {
+        case client_1.UserRole.donor:
+            if (!userId) {
+                throw new ApiError_1.default(http_status_1.default.BAD_REQUEST, "User ID is required for donor stats.");
+            }
+            return yield getDonorStats(userId);
+        case client_1.UserRole.requester:
+            if (!userId) {
+                throw new ApiError_1.default(http_status_1.default.BAD_REQUEST, "User ID is required for requester stats.");
+            }
+            return yield getRequesterStats(userId);
+        case client_1.UserRole.admin:
+            return yield getAdminStats();
+        default:
+            throw new ApiError_1.default(http_status_1.default.BAD_REQUEST, "Invalid role specified.");
+    }
+});
 exports.UserService = {
     registerUserIntoDB,
     getAllDonarFromDB,
@@ -367,4 +532,9 @@ exports.UserService = {
     getSingleUserFromDB,
     updateUserRoleStatusIntoDB,
     getAllUserFromDB,
+    getStatsFromDB,
+    getDonationsWithFullDateRange,
+    getDonorStats,
+    getAdminStats,
+    getRequesterStats,
 };

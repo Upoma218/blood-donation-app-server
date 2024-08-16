@@ -603,6 +603,9 @@ const getAdminStats = async () => {
   const totalAvailableDonors = await prisma.user.count({
     where: { role: UserRole.donor, availability: true },
   });
+  const totalUnAvailableDonors = await prisma.user.count({
+    where: { role: UserRole.donor, availability: false },
+  });
   const totalActiveUsers = await prisma.user.count({
     where: { status: Status.active },
   });
@@ -617,6 +620,7 @@ const getAdminStats = async () => {
     totalAvailableDonors,
     totalActiveUsers,
     totalDeactivatedUsers,
+    totalUnAvailableDonors,
   };
 };
 

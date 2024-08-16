@@ -21,4 +21,6 @@ router.post("/register", (0, validateRequest_1.default)(user_validation_1.UserVa
 router.post("/donation-request", (0, auth_1.default)(client_1.UserRole.requester), (0, validateRequest_1.default)(user_validation_1.UserValidation.donationRequestSchema), user_controller_1.UserController.createDonationRequest);
 router.put("/donation-request/:requestId", (0, auth_1.default)(client_1.UserRole.admin, client_1.UserRole.donor), (0, validateRequest_1.default)(user_validation_1.UserValidation.updateRequestStatusSchema), user_controller_1.UserController.updateRequestStatus);
 router.patch("/manage-user/:id", (0, auth_1.default)(client_1.UserRole.admin), (0, validateRequest_1.default)(user_validation_1.UserValidation.updateUserRoleStatusSchema), user_controller_1.UserController.updateUserRoleStatus);
+// Stats routes
+router.get("/stats", (0, auth_1.default)(client_1.UserRole.admin, client_1.UserRole.donor, client_1.UserRole.requester), user_controller_1.UserController.getStats);
 exports.UserRoutes = router;
