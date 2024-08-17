@@ -477,6 +477,9 @@ const getAdminStats = () => __awaiter(void 0, void 0, void 0, function* () {
     const totalAvailableDonors = yield prisma_1.default.user.count({
         where: { role: client_1.UserRole.donor, availability: true },
     });
+    const totalUnAvailableDonors = yield prisma_1.default.user.count({
+        where: { role: client_1.UserRole.donor, availability: false },
+    });
     const totalActiveUsers = yield prisma_1.default.user.count({
         where: { status: client_1.Status.active },
     });
@@ -490,6 +493,7 @@ const getAdminStats = () => __awaiter(void 0, void 0, void 0, function* () {
         totalAvailableDonors,
         totalActiveUsers,
         totalDeactivatedUsers,
+        totalUnAvailableDonors,
     };
 });
 // Aggregate getStatsFromDB for different roles

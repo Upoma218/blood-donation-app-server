@@ -170,10 +170,10 @@ const getStats = catchAsync(async (req: Request, res: Response) => {
   }
 
   if (role === UserRole.donor || role === UserRole.requester) {
-    if (!userId) {
+    if (!role) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        "User ID is required for donor or requester stats."
+        "Role is required for donor or requester stats."
       );
     }
 

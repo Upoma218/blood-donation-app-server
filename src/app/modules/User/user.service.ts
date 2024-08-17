@@ -28,13 +28,11 @@ const registerUserIntoDB = async (req: Request): Promise<any> => {
     bloodType: req.body.bloodType,
     location: req.body.location,
   };
-
   const userProfileData = {
     bio: req.body.bio,
     age: req.body.age,
     lastDonationDate: req.body.lastDonationDate,
   };
-
   const result = await prisma.$transaction(async (transactionClient) => {
     const user = await transactionClient.user.create({
       data: userData,
@@ -45,7 +43,6 @@ const registerUserIntoDB = async (req: Request): Promise<any> => {
         userId: user.id,
       },
     });
-
     const userWithProfile = await transactionClient.user.findUnique({
       where: { id: user.id },
       select: {
@@ -63,18 +60,15 @@ const registerUserIntoDB = async (req: Request): Promise<any> => {
         userProfile: true,
       },
     });
-
     return userWithProfile;
   });
   return result;
 };
-
 const getAllDonarFromDB = async (params: any, options: TPaginationOptions) => {
   const { page, limit, skip, sortBy, sortOrder } =
     pagination.calculatePagination(options);
   const { availability, searchTerm, ...filterData } = params;
   const andConditions: Prisma.UserWhereInput[] = [];
-
   if (searchTerm) {
     andConditions.push({
       OR: searchableFields.map((field) => ({
@@ -85,7 +79,6 @@ const getAllDonarFromDB = async (params: any, options: TPaginationOptions) => {
       })),
     });
   }
-
   if (Object.keys(filterData).length > 0) {
     andConditions.push({
       AND: Object.keys(filterData).map((key) => ({
@@ -96,7 +89,6 @@ const getAllDonarFromDB = async (params: any, options: TPaginationOptions) => {
       })),
     });
   }
-
   if (availability === true || availability === false) {
     andConditions.push({
       AND: [
@@ -115,7 +107,6 @@ const getAllDonarFromDB = async (params: any, options: TPaginationOptions) => {
       },
     },
   });
-
   const whereConditions: Prisma.UserWhereInput =
     andConditions.length > 0 ? { AND: andConditions } : {};
   const result = await prisma.user.findMany({
@@ -140,11 +131,9 @@ const getAllDonarFromDB = async (params: any, options: TPaginationOptions) => {
       userProfile: true,
     },
   });
-
   const total = await prisma.user.count({
     where: whereConditions,
   });
-
   return {
     meta: {
       total,
@@ -166,14 +155,11 @@ const getAllUserFromDB = async () => {
   const result = await prisma.user.findMany();
   return result;
 };
-
 const createDonationRequestIntoDB = async (req: Request): Promise<any> => {
   const token = req.headers.authorization;
-
   if (!token) {
     throw new ApiError(httpStatus.UNAUTHORIZED, "Unauthorized Access!");
   }
-
   const decodedToken = jwtToken.verifyToken(
     token,
     config.jwt.jwt_secret as Secret
@@ -182,7 +168,7 @@ const createDonationRequestIntoDB = async (req: Request): Promise<any> => {
     name: string;
     email: string;
   };
-  console.log(decodedToken);
+  // console.log(decodedToken);
   if (!decodedToken) {
     throw new ApiError(httpStatus.UNAUTHORIZED, "Unauthorized Access!");
   }
@@ -220,19 +206,16 @@ const createDonationRequestIntoDB = async (req: Request): Promise<any> => {
       },
     },
   });
-  console.log(result);
+  // console.log(result);
   return result;
 };
-
 const getDonationRequestsForDonorFromDB = async (
   req: Request
 ): Promise<any> => {
   const token = req.headers.authorization;
-
   if (!token) {
     throw new ApiError(httpStatus.UNAUTHORIZED, "Unauthorized Access!");
   }
-
   // Decoding the token to get the donor's details
   const decodedToken = jwtToken.verifyToken(
     token,
@@ -277,26 +260,14 @@ const getDonationRequestsForDonorFromDB = async (
 
   const result = await prisma.request.findMany({
     where: {
-      // donorId: decodedToken.id,
       ...whereOption,
     },
     include: {
       ...includeOption,
-      // requester: {
-      //   select: {
-      //     id: true,
-      //     name: true,
-      //     email: true,
-      //     phone: true,
-      //     location: true,
-      //     bloodType: true,
-      //     availability: true,
-      //   },
-      // },
     },
   });
 
-  console.log(result, decodedToken);
+  // console.log(result, decodedToken);
 
   return result;
 };
@@ -307,11 +278,9 @@ const updateRequestStatusIntoDB = async (
   status: RequestStatus
 ): Promise<any> => {
   const token = req.headers.authorization;
-
   if (!token) {
     throw new ApiError(httpStatus.UNAUTHORIZED, "Unauthorized Access!");
   }
-
   // Decoding the token to get the donor's details
   const decodedToken = jwtToken.verifyToken(
     token,
@@ -319,7 +288,6 @@ const updateRequestStatusIntoDB = async (
   ) as {
     id: string;
   };
-
   const request = await prisma.request.findUnique({
     where: {
       id: requestId,
@@ -328,13 +296,6 @@ const updateRequestStatusIntoDB = async (
       donorId: true,
     },
   });
-
-  if (!request || request.donorId !== decodedToken.id) {
-    throw new ApiError(
-      httpStatus.FORBIDDEN,
-      "You are not authorized to update this request status!"
-    );
-  }
 
   // Updating the request status
   const updatedRequest = await prisma.request.update({
@@ -357,17 +318,13 @@ const updateRequestStatusIntoDB = async (
       updatedAt: true,
     },
   });
-
   return updatedRequest;
 };
-
 const getUserProfileFromDB = async (req: Request): Promise<any> => {
   const token = req.headers.authorization;
-
   if (!token) {
     throw new ApiError(httpStatus.UNAUTHORIZED, "Unauthorized Access!");
   }
-
   // Decoding the token to get the donor's details
   const decodedToken = jwtToken.verifyToken(
     token,
@@ -375,7 +332,6 @@ const getUserProfileFromDB = async (req: Request): Promise<any> => {
   ) as {
     id: string;
   };
-
   const result = await prisma.user.findUnique({
     where: {
       id: decodedToken.id,
@@ -394,20 +350,16 @@ const getUserProfileFromDB = async (req: Request): Promise<any> => {
       userProfile: true,
     },
   });
-
   return result;
 };
-
 const updateUserProfileIntoDB = async (
   req: Request,
   data: Partial<UserProfile>
 ): Promise<UserProfile> => {
   const token = req.headers.authorization;
-
   if (!token) {
     throw new ApiError(httpStatus.UNAUTHORIZED, "Unauthorized Access!");
   }
-
   // Decoding the token to get the user's details
   const decodedToken = jwtToken.verifyToken(
     token,
@@ -415,7 +367,6 @@ const updateUserProfileIntoDB = async (
   ) as {
     id: string;
   };
-
   // Update user profile in the database based on the decoded user ID
   const updatedProfile = await prisma.userProfile.update({
     where: {
@@ -423,35 +374,29 @@ const updateUserProfileIntoDB = async (
     },
     data,
   });
-
   return updatedProfile;
 };
-
 type UpdateUser = {
   id: string;
   status?: Status;
   role?: UserRole;
 };
-
 const updateUserRoleStatusIntoDB = async (payload: UpdateUser) => {
   const updateData: Partial<UpdateUser> = {};
-  console.log(payload);
-
+  // console.log(payload);
   if (payload.status !== undefined) {
     updateData.status = payload.status;
   }
-
   if (payload.role !== undefined) {
     updateData.role = payload.role;
   }
-
   const updatedProfile = await prisma.user.update({
     where: {
       id: payload.id,
     },
     data: updateData,
   });
-  console.log(updatedProfile);
+  // console.log(updatedProfile);
   return updatedProfile;
 };
 
@@ -464,7 +409,7 @@ const updateUserRoleStatusIntoDB = async (payload: UpdateUser) => {
 const getDonationsWithFullDateRange = async (
   userId: string,
   role: UserRole,
-  daysBack: number = 30
+  daysBack: number = 365
 ) => {
   // Step 1: Generate the complete date range
   const endDate = new Date();
@@ -493,9 +438,16 @@ const getDonationsWithFullDateRange = async (
     },
   });
 
-  // Step 3: Merge the full date range with the donations result
   const donationsMap = donations.reduce((acc: any, curr: any) => {
-    acc[curr.dateOfDonation.toISOString().split("T")[0]] = curr._count.id;
+    const donationDate = new Date(curr.dateOfDonation);
+
+    // Ensure the conversion is valid
+    if (!isNaN(donationDate.getTime())) {
+      acc[donationDate.toISOString().split("T")[0]] = curr._count.id;
+    } else {
+      console.error("Invalid date:", curr.dateOfDonation);
+    }
+
     return acc;
   }, {});
 
@@ -645,19 +597,19 @@ const getStatsFromDB = async (
 
   switch (role) {
     case UserRole.donor:
-      if (!userId) {
+      if (!role) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
-          "User ID is required for donor stats."
+          "Role is required for donor stats."
         );
       }
       return await getDonorStats(userId);
 
     case UserRole.requester:
-      if (!userId) {
+      if (!role) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
-          "User ID is required for requester stats."
+          "Role is required for requester stats."
         );
       }
       return await getRequesterStats(userId);
